@@ -1,0 +1,5 @@
+# thirdparty/PlemolJP ディレクトリを除外
+thirdparty/PlemolJP/
+
+# models ディレクトリ内の.gguf ファイルのみ除外
+models/*.gguf
