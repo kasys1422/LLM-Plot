@@ -4,9 +4,10 @@ import time
 import dearpygui.dearpygui as dpg
 from thirdparty.DearPyGui_Markdown.DPG_Markdown_Util import *
 from plot_manager import Plot_Manager
-from llm_manager import LLM_Manager
+from llm_manager import LLM_Tools
 from config_manager import ConfigManager
 from util import *
+
 
 class ChatManager:
     def __init__(self):
@@ -94,7 +95,7 @@ def main():
     chat_manager = ChatManager()
     chat_ui = ChatUI(chat_manager)
 
-    llm = LLM_Manager()
+    llm = LLM_Tools()
     default_window_size = [1280, 720]
     dpg.create_context()
     pm = Plot_Manager("Plot window", llm)
@@ -141,10 +142,8 @@ def main():
                             if type_from_ui == "Auto":
                                 chat_ui.send_message("Assistant", f"思考中...")
                                 try:
-                                    result, json_str = llm.json_infer(
-                                        f"「{message}」" + '''の内容はどのような質問ですか？プロットの実行や描画、作成、プロット内容（タイトル、軸ラベル、色、凡例など）の変更を指示する内容なら"plot"、データや統計に関する質問なら"data"、その他の内容なら"chat"を必ず単一のJSON形式（{"type": "種類"}）で回答してください。''', "You are an assistant who briefly answers the questions asked. Please answer all questions in JSON format.", 0.2)
-                                    print(json_str)
-                                    ai_type = result["type"]
+                                    ai_type = llm.message_classification(
+                                        message)
                                 except Exception as e:
                                     print_exception_info(e)
                                     ai_type = "other"
@@ -167,60 +166,15 @@ def main():
 
                                 chat_ui.send_message(
                                     "Assistant", f"プロットを作成中...")
-
-                                prompt = f"""Create or edit the JSON file according to the following orders and information. However, in the case of editing, only the difference JSON should be output.
-# Order
-{message}
-
-# DataFrame (Head)
-{pm.df.head(5)}
-
-# DataFrame imformation
-{str(pm.column_info.get_column_info())}
-
-""" + (f"# Now JSON Plot Paramater(Editable)\n{json.dumps(pm.plot_dict, ensure_ascii=False, indent=1)}\n" if pm.plot_dict is not None else "", message)[0]
-
-                                system_prompt = """You are a convenient and friendly plotting assistant that outputs in JSON. Please reply with concise JSON in the format specified to assist in plotting.
-## Default JSON Plot Format
-{
-"title": "プロットのタイトル",
-"xAxis": {
-  "label": "X軸のラベル",
-  "columns": ["x1", "x2"], // 複数のX軸データ列
-},
-"yAxis": {
-  "label": "Y軸のラベル",
-  "columns": ["y1", "y2"], // 複数のY軸データ列
-},
-"ylabel2": "y軸のラベル(2軸目)" or null ,
-"series": [
-  {
-    "label": "データセットn",
-    "filter": ["Column == 'データセットn'"などのpandasのフィルタ構文, ...] / [null],
-    "type": "line/bar/pie/scatter",  
-    "xColumn": "xn",
-    "yColumn": "yn",
-    "color": "some color(HEX)"
-  },
-  ...
-],
-"legend": null or "top-rightのような位置指定",
-"options": {
-  "gridLines": bool
-}
-}
-
-"""
-                                print(prompt)
                                 try:
-                                    result, json_str = llm.json_infer(
-                                        prompt, system_prompt)
-                                    print(json_str)
-                                    if pm.plot_dict is not None:
-                                        result = merge_dicts(pm.plot_dict, result)
-                                        print(f"marged dict \n{json.dumps(result, ensure_ascii=False, indent=2)}")
+                                    result = llm.plot(message, pm.df.head(5), pm.column_info.get_column_info(
+                                    ), pm.plot_dict)
+                                    print(
+                                        f"marged dict \n{json.dumps(result, ensure_ascii=False, indent=2)}")
+                                        
+                                    
                                     pm.set_plot_json(result)
-                                    pm.je.set_json(result)
+                                    pm.je.set_json()
                                     pm.create_plot()
                                     chat_ui.delete_message()
                                     chat_ui.send_message(
@@ -239,19 +193,8 @@ def main():
                                     chat_ui.unlock_ui()
                                     return
                                 chat_ui.send_message("Assistant", f"思考中...")
-                                result = llm.infer([
-                                    {"role": "assistant",
-                                        "content": f"こんにちは。データに関してなにかお手伝いできますか？", },
-                                    {"role": "user", "content": f"{message}"},],
-                                    f"""Assistantは優秀で親切なアシスタントです。Assistantは以下のデータ(Userには見えない)を見やすく整形してUserに提供してください。
-# DataFrame (Head)
-{pm.df.head(5)}
-# DataFrame Columns imformation
-{str(pm.column_info.get_column_info())}
-# DataFrame Statistics imformation
-{str(pm.dfv.get_statistics(pm.df))}
-""" + (f"# Plot Settings\n{json.dumps(pm.plot_dict, ensure_ascii=False, indent=1)}" if pm.plot_dict is not None else "")[0])
-
+                                result = llm.data(message, pm.df.head(5), pm.column_info.get_column_info(
+                                ), pm.plot_dict, pm.dfv.get_statistics(pm.df))
                                 chat_ui.delete_message()
                                 chat_ui.send_message("Assistant", result)
                                 chat_ui.unlock_ui()
@@ -259,8 +202,7 @@ def main():
                             else:
                                 messages = chat_ui.chat_manager.messages.copy()
                                 chat_ui.send_message("Assistant", f"思考中...")
-                                result = llm.infer(
-                                    messages, """AssistantはCSVデータのプロットに関する優秀で親切なアシスタント「Plot AI」です。Userと会話してください。""")
+                                result = llm.chat(messages)
 
                                 chat_ui.delete_message()
                                 chat_ui.send_message("Assistant", result)
@@ -278,50 +220,51 @@ def main():
         dpg.set_item_height("chat_window", dpg.get_viewport_height()-210)
         dpg.set_item_width("message_input", dpg.get_viewport_width()-240)
 
-    pm.set_csv("./samples/monthly_sales_data.csv")
+#     pm.set_csv("./samples/monthly_sales_data.csv")
 
-    pm.set_plot_json(json.loads("""
-{
-"title": "売上状況",
-"xAxis": {
-    "label": "月",
-    "columns": ["Month"],
-    "time": true
-},
-"yAxis": {
-    "label": "売上高",
-    "columns": ["Sales"],
-    "time": false
-},
-"series": [
-    {
-    "label": "A",
-    "filter": ["Product == 'Product A'"],
-    "type": "bar",
-    "xColumn": "Month",
-    "yColumn": "Sales",
-    "color": "blue"
-    },
-    {
-    "label": "B",
-    "filter": ["Product == 'Product B'"],
-    "type": "bar",
-    "xColumn": "Month",
-    "yColumn": "Sales",
-    "color": "green"
-    },
-    {
-    "label": "C",
-    "filter": ["Product == 'Product C'"],
-    "type": "bar",
-    "xColumn": "Month",
-    "yColumn": "Sales",
-    "color": "red"
-    }
-]
-}
-"""))
-    pm.create_plot()
+#     pm.set_plot_json(json.loads("""
+# {
+# "title": "売上状況",
+# "xAxis": {
+#     "label": "月",
+#     "columns": ["Month"],
+#     "time": true
+# },
+# "yAxis": {
+#     "label": "売上高",
+#     "columns": ["Sales"],
+#     "time": false
+# },
+# "series": [
+#     {
+#     "label": "A",
+#     "filter": ["Product == 'Product A'"],
+#     "type": "bar",
+#     "xColumn": "Month",
+#     "yColumn": "Sales",
+#     "color": "blue"
+#     },
+#     {
+#     "label": "B",
+#     "filter": ["Product == 'Product B'"],
+#     "type": "bar",
+#     "xColumn": "Month",
+#     "yColumn": "Sales",
+#     "color": "green"
+#     },
+#     {
+#     "label": "C",
+#     "filter": ["Product == 'Product C'"],
+#     "type": "bar",
+#     "xColumn": "Month",
+#     "yColumn": "Sales",
+#     "color": "red"
+#     }
+# ],
+# "legend":{"position":"TopLeft"}
+# }
+# """))
+#     pm.create_plot()
 
     dpg.set_viewport_resize_callback(viewport_update)
 

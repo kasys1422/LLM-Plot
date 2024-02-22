@@ -59,7 +59,7 @@ class PandasDataFrameViewer:
         stats_df = dataframe.describe().transpose()
         stats_df.insert(0, 'Column Name', stats_df.index)
         return stats_df
-    
+
     def add_statistics_tab(self, dataframe):
         stats_df = self.get_statistics(dataframe)
         tab_label = "Statistics"
@@ -170,9 +170,9 @@ class Plot_Manager:
 
         with dpg.plot(label=plot_dict.get("title", "Plot"), width=-1, height=-1, parent=self.window_tag, anti_aliased=True, tag=f"{self.window_tag}_plot"):
             if "legend" in plot_dict:
-                if plot_dict["legend"] is not None:
+                if plot_dict["legend"]["position"] is not None:
                     try:
-                        dpg.add_plot_legend(location={
+                        locations = {
                             "TopLeft": dpg.mvPlot_Location_NorthWest,
                             "TopCenter": dpg.mvPlot_Location_North,
                             "TopRight": dpg.mvPlot_Location_NorthEast,
@@ -191,27 +191,25 @@ class Plot_Manager:
                             "left": dpg.mvPlot_Location_West,
                             "center": dpg.mvPlot_Location_Center,
                             "right": dpg.mvPlot_Location_East,
-                        }[plot_dict["legend"]])
-                    except:
-                        pass
-                    
+                        }
+                        print(plot_dict["legend"]["position"])
+                        dpg.add_plot_legend(location=locations[plot_dict["legend"]["position"]])
+                    except Exception as e:
+                        print_exception_info(e)
+
             # 列名確認
             for i in range(len(plot_dict["series"])):
                 for column_label in ["xColumn", "yColumn"]:
-                    column_status, correct_column_info = check_column_match(self.df, plot_dict["series"][i][column_label])
+                    column_status, correct_column_info = check_column_match(
+                        self.df, plot_dict["series"][i][column_label])
                     if str(column_status) == "1":
                         plot_dict["series"][i][column_label] = correct_column_info
                     if str(column_status) == "-1":
                         print("Column error")
                         try:
                             unique_data = self.df.columns.tolist()
-                            prompt = f"""「{plot_dict["series"][i][column_label]}」の意味は{str(unique_data)}のうち、どの単語に一番近いですか？回答形式は"""+"""
-{"result": "単語"}
-とします。
-"""
-                            print(prompt)
-                            result, json_str = self.llm.json_infer(
-                                prompt, "You are an assistant who briefly answers the questions asked. Please answer all questions in JSON format.", 0)
+                            result, json_str = self.llm.similarity_string_extraction(
+                                plot_dict["series"][i][column_label], unique_data)
                             plot_dict["series"][i][column_label] = result["result"]
                             print(result)
                         except Exception as e:
@@ -226,11 +224,24 @@ class Plot_Manager:
             yaxis_id = dpg.add_plot_axis(
                 dpg.mvYAxis, label=plot_dict["yAxis"]["label"], time=y_is_time)
 
-            bar_series_count = sum(
-                1 for item in plot_dict["series"] if item["type"] == "bar")
+            try:
+                bar_series_count = sum(
+                    1 for item in plot_dict["series"] if item["type"] == "bar")
+            except KeyError:
+                bar_series_count = 0
             series_count = len(plot_dict["series"])
+            
+            try:
+                if plot_dict.get("options", {}).get("gridLines", False):
+                    self.tm.init_white_plot()
+                else:
+                    self.tm.init_white_plot(True)
+            except Exception as e:
+                print_exception_info(e)
 
             for series in plot_dict["series"]:
+                if not "type" in series:
+                    series["type"] = "line"
                 # フィルタ条件がある場合はフィルタリングを適用
                 if "filter" in series:
                     filters = series["filter"]
@@ -239,6 +250,8 @@ class Plot_Manager:
                         filtered_df = self.df
                         for i in range(len(filters)):
                             filter_condition = filters[i]
+                            splited_filter_condition = split_condition(
+                                filter_condition)
                             backup_df = filtered_df
                             try:
                                 filtered_df = filtered_df.query(
@@ -251,24 +264,16 @@ class Plot_Manager:
                                     print("filter len = 0")
                                     try:
                                         unique_data = self.column_info.get_column_info()[
-                                            filter_condition.split()[0]]
+                                            splited_filter_condition[0]]
                                         if unique_data["type"] == "str":
                                             filtered_df = backup_df
-                                            prompt = f"""
-「{filter_condition}」の右辺は{str(unique_data["unique_values"])}のどの単語に一番近いですか？回答形式は"""+"""
-{"result": "単語"}
-とします。
-"""
-                                            print(prompt)
-                                            result, json_str = self.llm.json_infer(
-                                                prompt, "You are an assistant who briefly answers the questions asked. Please answer all questions in JSON format.")
-                                        
-
-                                            series["filter"][i] = f'{filter_condition.split()[0]} {filter_condition.split()[1]} \"{result["result"]}\"'
+                                            result, json_str = self.llm.similarity_string_extraction(
+                                                splited_filter_condition[2], unique_data["unique_values"])
+                                            series["filter"][i] = f'{splited_filter_condition[0]} {splited_filter_condition[1]} \"{result["result"]}\"'
                                             print(series["filter"][i])
                                             filtered_df = filtered_df.query(
                                                 series["filter"][i])
-                                        
+
                                     except Exception as e:
                                         print_exception_info(e)
                     else:
@@ -277,8 +282,6 @@ class Plot_Manager:
                     filtered_df = self.df
                 x_values = filtered_df[series["xColumn"]]
                 y_values = filtered_df[series["yColumn"]]
-
-                self.je.set_json(self.plot_dict)
 
                 
 
@@ -296,18 +299,20 @@ class Plot_Manager:
                 x_values = x_values.tolist()
                 y_values = y_values.tolist()
 
-                # X軸が文字列データの場合 
-                
+                # X軸が文字列データの場合
+
                 x_is_str = False
                 buffer = self.column_info.get_column_info()
-                x_values, y_values = sum_values_for_duplicate_keys(x_values, y_values)
+                x_values, y_values = sum_values_for_duplicate_keys(
+                    x_values, y_values)
                 old_x_values = x_values
                 if buffer[series["xColumn"]]["type"] == "str" and not x_is_time or series["type"] == "pie":
-                    processed_list = [[str(item), index + 11] for index, item in enumerate(x_values)]
-                    dpg.set_axis_ticks(axis=xaxis_id, label_pairs=processed_list)
+                    processed_list = [[str(item), index + 11]
+                                      for index, item in enumerate(x_values)]
+                    dpg.set_axis_ticks(
+                        axis=xaxis_id, label_pairs=processed_list)
                     x_values = [index + 11 for index, _ in enumerate(x_values)]
                     x_is_str = True
-            
 
                 # 色の指定がない場合はリストから色を割り当て
                 color = series.get("color", None)
@@ -328,11 +333,12 @@ class Plot_Manager:
                         weight = (max(x_values) - min(x_values)) / \
                             (len(x_values) * bar_series_count * 1.2)
                         dpg.add_bar_series([x + (weight * (self.tag_number-bar_series_count/2))
-                                       for x in x_values], y_values, label=label, tag=tag, parent=yaxis_id, weight=weight)
+                                            for x in x_values], y_values, label=label, tag=tag, parent=yaxis_id, weight=weight)
                     else:
-                        weight = 0.5                 
-                        dpg.add_bar_series(x_values, y_values, label=label, tag=tag, parent=yaxis_id, weight=weight)
-                    
+                        weight = 0.5
+                        dpg.add_bar_series(
+                            x_values, y_values, label=label, tag=tag, parent=yaxis_id, weight=weight)
+
                 elif series["type"] == "scatter":
                     dpg.add_scatter_series(
                         x_values, y_values, label=label, tag=tag, parent=yaxis_id)
@@ -344,26 +350,23 @@ class Plot_Manager:
                 # 他のシリーズタイプについても同様に処理を追加してください
 
                 # テーマ
-                with dpg.theme(tag=f"theme_series_{self.tag_number}"):
-                    with dpg.theme_component(0):
-                        if color is not None:
-                            color = to_rgb_tuple(color)
-                            dpg.add_theme_color(
-                                dpg.mvPlotCol_Line, color, category=dpg.mvThemeCat_Plots)
-                            dpg.add_theme_color(
-                                dpg.mvPlotCol_Fill, color, category=dpg.mvThemeCat_Plots)
-                            dpg.add_theme_color(
-                                dpg.mvPlotCol_MarkerOutline, color, category=dpg.mvThemeCat_Plots)
-                            dpg.add_theme_color(
-                                dpg.mvPlotCol_MarkerFill, color, category=dpg.mvThemeCat_Plots)
-                if color is not None:
-                    dpg.bind_item_theme(
-                        f"series_{self.tag_number}", f"theme_series_{self.tag_number}")
-
+                try:
+                    with dpg.theme(tag=f"theme_series_{self.tag_number}"):
+                        with dpg.theme_component(0):
+                            if color is not None:
+                                color = to_rgb_tuple(color)
+                                dpg.add_theme_color(
+                                    dpg.mvPlotCol_Line, color, category=dpg.mvThemeCat_Plots)
+                                dpg.add_theme_color(
+                                    dpg.mvPlotCol_Fill, color, category=dpg.mvThemeCat_Plots)
+                                dpg.add_theme_color(
+                                    dpg.mvPlotCol_MarkerOutline, color, category=dpg.mvThemeCat_Plots)
+                                dpg.add_theme_color(
+                                    dpg.mvPlotCol_MarkerFill, color, category=dpg.mvThemeCat_Plots)
+                    if color is not None:
+                        dpg.bind_item_theme(
+                            f"series_{self.tag_number}", f"theme_series_{self.tag_number}")
+                except Exception as e:
+                    print_exception_info(e)
                 self.tag_number += 1
 
-            if plot_dict.get("options", {}).get("gridLines", False):
-                # dpg.add_plot_gridlines(horizontal=True, vertical=True, parent=yaxis_id)
-                self.tm.init_white_plot()
-            else:
-                self.tm.init_white_plot(True)

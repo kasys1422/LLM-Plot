@@ -4,12 +4,35 @@ from dateutil.parser import parse
 import dearpygui.dearpygui as dpg
 import traceback
 
+
+def split_condition(condition):
+    if condition is None:
+        return []
+    # 比較演算子にマッチする正規表現パターン
+    pattern = r'(<=|>=|!=|==|>|<)'
+    # 条件式を比較演算子で分割
+    parts = re.split(pattern, condition)
+    # 分割された各部分をトリム（前後の空白を削除）して返す
+    return [part.strip() for part in parts]
+
+
 def merge_dicts(base, update):
     """
-    2つの辞書を深くマージする関数。リスト内の辞書も特定のキーに基づいてマージします。
+    2つの辞書をマージする関数。リスト内の辞書も特定のキーに基づいてマージします。
     """
-    merged = base.copy()  # ベースの辞書をコピー
+    if base is None:
+        print("base is None")
+        base = {
+            "title": "Plot Title",
+            "xAxis": {"label": "X軸", "columns": []},
+            "yAxis": {"label": "Y軸", "columns": []},
+            "series": [],
+            "legend": {"position": None},
+            "options": {"gridLines": True}
+        }
 
+    merged = base.copy()  # ベースの辞書をコピー
+    print(update)
     for key, value in update.items():
         # ベースとアップデートの両方でキーが存在する場合
         if key in merged:
@@ -28,6 +51,7 @@ def merge_dicts(base, update):
 
     return merged
 
+
 def merge_lists(base_list, update_list):
     """
     2つのリストをマージする関数。辞書が含まれる場合、特定のキーに基づいてマージを試みる。
@@ -40,10 +64,12 @@ def merge_lists(base_list, update_list):
         if isinstance(update_item, dict):
             # 更新項目が辞書の場合、一致するラベルを持つ既存の辞書を探す
             label = update_item.get('label')
-            existing_item = next((item for item in merged_list if isinstance(item, dict) and item.get('label') == label), None)
+            existing_item = next((item for item in merged_list if isinstance(
+                item, dict) and item.get('label') == label), None)
             if existing_item:
                 # 一致するラベルが見つかった場合、辞書をマージ
-                merged_list[merged_list.index(existing_item)] = merge_dicts(existing_item, update_item)
+                merged_list[merged_list.index(existing_item)] = merge_dicts(
+                    existing_item, update_item)
             else:
                 # 一致するラベルがない場合、辞書を追加
                 merged_list.append(update_item)
@@ -54,20 +80,22 @@ def merge_lists(base_list, update_list):
 
     return merged_list
 
+
 def print_exception_info(e):
     # エラーの型とメッセージを表示
     print(f"Error type: {type(e).__name__}, Message: {str(e)}")
-    
+
     # スタックトレースを表示
     print("\nStack Trace:")
     traceback.print_tb(e.__traceback__)
-    
+
     # 例外オブジェクトのすべての属性を表示
     print("\nException attributes:")
     for attr in dir(e):
         # 特定の属性を表示
         print(f"{attr}: {getattr(e, attr, 'Not Available')}")
-        
+
+
 def check_column_exists(df, column_name):
     """
     指定したデータフレームに指定した名前の列が存在するか確認する。
@@ -85,7 +113,7 @@ def check_column_exists(df, column_name):
         return True  # 列が存在する
     else:
         return False
-    
+
 
 def check_column_match(df, column_name):
     """
@@ -111,7 +139,7 @@ def check_column_match(df, column_name):
     lower_case_columns = {col.lower(): col for col in df.columns}
     # 指定された列名も小文字に変換
     lower_case_column_name = column_name.lower()
-    
+
     if column_name in df.columns:
         return 0, column_name  # 列が完全に一致する
     elif lower_case_column_name in lower_case_columns:
@@ -119,6 +147,7 @@ def check_column_match(df, column_name):
         return 1, lower_case_columns[lower_case_column_name]
     else:
         return -1, None  # 列が一致しない
+
 
 def on_window_close(sender, app_data, user_data):
     # workaround
@@ -130,10 +159,11 @@ def on_window_close(sender, app_data, user_data):
     dpg.delete_item(sender)
     print("window was deleted")
 
+
 def sum_values_for_duplicate_keys(x, y):
     # 空の辞書を初期化
     result_dict = {}
-    
+
     # xとyの要素をループで回す
     for key, value in zip(x, y):
         # キーが既に辞書に存在する場合は、値を合計する
@@ -142,12 +172,13 @@ def sum_values_for_duplicate_keys(x, y):
         else:
             # そうでなければ、新しいキーと値のペアを辞書に追加
             result_dict[key] = value
-            
+
     # 辞書からx_listとy_listを作成
     x_list = list(result_dict.keys())
     y_list = list(result_dict.values())
-    
+
     return x_list, y_list
+
 
 def to_rgb_tuple(input_color):
     # RGBやRGBAの形式を直接解析
