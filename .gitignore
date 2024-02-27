@@ -1,3 +1,5 @@
+config.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -163,8 +165,6 @@ thirdparty/PlemolJP/
 
 # models ディレクトリ内の.gguf ファイルのみ除外
 models/*.gguf
-
-config.json
 
 .venv/
 
