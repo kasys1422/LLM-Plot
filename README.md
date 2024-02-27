@@ -11,7 +11,7 @@
 ### サードパーティライセンス
 このリポジトリは次のOSSを含みます
 
-### [DearPyGUI-markdown](https://github.com/IvanNazaruk/DearPyGui-Markdown)
-- URL: https://github.com/IvanNazaruk/DearPyGui-Markdown
+#### DearPyGUI-markdown
+- オリジナルリポジトリのURL: https://github.com/IvanNazaruk/DearPyGui-Markdown
 - 変更点：日本語対応
 - LICENSE: [MIT](https://github.com/kasys1422/LLM-Plot/blob/main/thirdparty/DearPyGui_Markdown/LICENSE)
