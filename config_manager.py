@@ -5,6 +5,7 @@ class ConfigManager:
     # デフォルト設定をクラス変数として定義
     default_settings = {
         'plot_csv': None,
+        'model_path': './models/ELYZA-japanese-CodeLlama-7b-instruct-q4_K_M.gguf'
     }
 
     def __init__(self, config_path):

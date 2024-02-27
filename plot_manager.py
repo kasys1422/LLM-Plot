@@ -198,22 +198,25 @@ class Plot_Manager:
                         print_exception_info(e)
 
             # 列名確認
-            for i in range(len(plot_dict["series"])):
-                for column_label in ["xColumn", "yColumn"]:
-                    column_status, correct_column_info = check_column_match(
-                        self.df, plot_dict["series"][i][column_label])
-                    if str(column_status) == "1":
-                        plot_dict["series"][i][column_label] = correct_column_info
-                    if str(column_status) == "-1":
-                        print("Column error")
-                        try:
-                            unique_data = self.df.columns.tolist()
-                            result, json_str = self.llm.similarity_string_extraction(
-                                plot_dict["series"][i][column_label], unique_data)
-                            plot_dict["series"][i][column_label] = result["result"]
-                            print(result)
-                        except Exception as e:
-                            print_exception_info(e)
+            try:
+                for i in range(len(plot_dict["series"])):
+                    for column_label in ["xColumn", "yColumn"]:
+                        column_status, correct_column_info = check_column_match(
+                            self.df, plot_dict["series"][i][column_label])
+                        if str(column_status) == "1":
+                            plot_dict["series"][i][column_label] = correct_column_info
+                        if str(column_status) == "-1":
+                            print("Column error")
+                            try:
+                                unique_data = self.df.columns.tolist()
+                                result, json_str = self.llm.similarity_string_extraction(
+                                    plot_dict["series"][i][column_label], unique_data)
+                                plot_dict["series"][i][column_label] = result["result"]
+                                print(result)
+                            except Exception as e:
+                                print_exception_info(e)
+            except Exception as e:
+                print_exception_info(e)
 
             x_is_time = is_time_expression(
                 self.df[plot_dict["series"][0]["xColumn"]].tolist()[-1])

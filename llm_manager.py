@@ -1,8 +1,18 @@
 from llama_cpp import Llama
 import json
+import re
 
 from util import merge_dicts
 
+def jsonc_to_json(jsonc_str):
+    """
+    Converts a JSONC string (JSON with comments) to a JSON string by removing comments.
+    """
+    # Remove single line comments
+    json_no_single_line_comments = re.sub(r'//.*', '', jsonc_str)
+    # Remove multi-line comments
+    json_no_comments = re.sub(r'/\*.*?\*/', '', json_no_single_line_comments, flags=re.DOTALL)
+    return json_no_comments
 
 def preprocess_json(json_str):
     # 最初の '{' の位置を見つけます
@@ -11,7 +21,7 @@ def preprocess_json(json_str):
     end_index = json_str.rfind('}')
     # 最初の '{' より前と最後の '}' より後を削除します
     cleaned_json_str = json_str[start_index:end_index+1]
-    return cleaned_json_str
+    return jsonc_to_json(cleaned_json_str)
 
 
 class LLM_Manager:

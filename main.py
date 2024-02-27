@@ -95,7 +95,7 @@ def main():
     chat_manager = ChatManager()
     chat_ui = ChatUI(chat_manager)
 
-    llm = LLM_Tools()
+    llm = LLM_Tools(cm.model_path)
     default_window_size = [1280, 720]
     dpg.create_context()
     pm = Plot_Manager("Plot window", llm)
@@ -174,7 +174,7 @@ def main():
                                         
                                     
                                     pm.set_plot_json(result)
-                                    pm.je.set_json()
+                                    pm.je.set_json(result)
                                     pm.create_plot()
                                     chat_ui.delete_message()
                                     chat_ui.send_message(
