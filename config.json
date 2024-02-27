@@ -1,3 +1,4 @@
 {
-    "plot_csv": null
+    "plot_csv": null,
+    "model_path": "./models/ELYZA-japanese-CodeLlama-7b-instruct-q4_K_M.gguf"
 }
